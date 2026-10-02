@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0019a8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>TfL Cycle Guide</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--blue:#0019a8;--red:#dc241f;--green:#00a651;--bg:#f1f3f8;--panel:#fff;--ink:#0d1b3d;--mute:#5b6685;--line:#d9deeb;--accent:#0019a8;--onaccent:#fff;--warn:#b3261e;--shadow:0 2px 10px rgba(13,27,61,.18)}
+@media(prefers-color-scheme:dark){:root{--bg:#0b1020;--panel:#151c33;--ink:#eef1fb;--mute:#9aa5c5;--line:#273154;--accent:#3d57f5;--onaccent:#fff;--warn:#ff8a80;--shadow:0 2px 12px rgba(0,0,0,.5)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 "Johnston ITC","Gill Sans","Gill Sans MT","Gill Sans Nova",Calibri,"Segoe UI",system-ui,sans-serif}
+header{background:var(--panel);border-bottom:5px solid var(--blue);padding:calc(env(safe-area-inset-top) + 8px) 16px 8px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:1100}
+header svg{width:44px;height:44px;flex:none}
+header h1{font-size:1.25rem;line-height:1.1;margin:0;color:var(--ink);letter-spacing:.01em}
+header small{display:block;color:var(--mute);font-size:.78rem}
+main{max-width:640px;margin:0 auto;padding:12px 14px calc(env(safe-area-inset-bottom) + 16px)}
+.mapwrap{position:relative}
+#map{height:300px;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow);z-index:0}
+.fab{position:absolute;z-index:1000;width:44px;height:44px;border-radius:12px;border:0;background:var(--panel);color:var(--ink);box-shadow:var(--shadow);display:grid;place-items:center;padding:0;cursor:pointer}
+.fab svg{width:22px;height:22px;fill:currentColor}
+#layersbtn{top:10px;right:10px}
+#locbtn{bottom:28px;right:10px;color:var(--accent)}
+.sheet{position:absolute;z-index:1000;top:62px;right:10px;background:var(--panel);border-radius:12px;box-shadow:var(--shadow);padding:6px;display:grid;gap:4px;min-width:140px}
+.sheet button{border:0;background:none;text-align:left;border-radius:8px;padding:10px 12px;color:var(--ink);font:inherit;cursor:pointer}
+.sheet button.on{background:var(--accent);color:#fff;font-weight:700}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0;box-shadow:0 1px 3px rgba(13,27,61,.08)}
+label{display:block;font-size:.8rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--mute);margin:12px 0 4px}
+input[type=text],select{width:100%;padding:12px;border-radius:10px;border:2px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+input[type=text]:focus,select:focus{border-color:var(--accent)}
+.row{display:flex;gap:8px;align-items:center}
+.row>input[type=text]{flex:1}
+button{font:inherit}
+.btn{border:2px solid var(--accent);background:transparent;color:var(--accent);border-radius:999px;padding:9px 14px;cursor:pointer;font-weight:700}
+.btn.primary{background:var(--accent);color:var(--onaccent)}
+.btn.on{background:var(--accent);color:var(--onaccent)}
+.btn:disabled{opacity:.5}
+.btn.red{border-color:var(--red);color:var(--red)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+.big{width:100%;margin-top:16px;padding:14px;font-size:1.05rem}
+.err{color:var(--warn);margin:8px 0 0;min-height:1.2em;font-weight:600}
+.note{color:var(--mute);font-size:.82rem;margin:4px 0}
+.hero{background:var(--accent);color:#fff;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px}
+.hero .t{font-size:2rem;font-weight:700;line-height:1}
+.hero .d{text-align:right;font-size:.95rem;line-height:1.3}
+.ctrl{display:grid;grid-template-columns:1fr 2fr 1fr 1fr;gap:8px;margin:12px 0}
+.alts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.steps{list-style:none;margin:0;padding:0}
+.step{position:relative;padding:10px 8px 10px 40px;cursor:pointer;border-radius:10px}
+.step::before{content:"";position:absolute;left:14px;top:0;bottom:0;width:8px;background:var(--accent);border-radius:4px}
+.step:first-child::before{top:18px}
+.step:last-child::before{bottom:calc(100% - 22px)}
+.step::after{content:"";position:absolute;left:10px;top:14px;width:16px;height:16px;border-radius:50%;background:var(--panel);border:4px solid var(--accent)}
+.step:first-child::after{background:var(--green);border-color:var(--green)}
+.step:last-child::after{background:var(--red);border-color:var(--red)}
+.step.on{background:color-mix(in srgb,var(--accent) 14%,transparent);font-weight:700}
+.step small{display:block;color:var(--mute);font-weight:400}
+.tag{display:inline-block;background:var(--accent);color:#fff;border-radius:6px;padding:0 6px;font-size:.72rem;margin-left:6px;font-weight:700}
+.hidden{display:none}
+.pin{background:var(--blue);color:#fff;border:3px solid #fff;border-radius:50%;width:26px;height:26px;text-align:center;font:700 13px/20px sans-serif;box-shadow:var(--shadow)}
+.you{width:20px;height:20px;border-radius:50%;background:#1a73ff;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.2),0 2px 6px rgba(0,0,0,.4)}
+.pop{display:grid;gap:6px}
+.pop button{border:2px solid var(--blue);background:#fff;color:var(--blue);border-radius:999px;padding:8px 12px;font-weight:700;cursor:pointer}
+.leaflet-container{font-family:inherit}
+@media(prefers-reduced-motion:no-preference){.step{transition:background .2s}}
+</style>
+</head>
+<body>
+<header>
+  <svg viewBox="0 0 48 48" role="img" aria-label="Cycle Guide">
+    <circle cx="24" cy="24" r="18.5" fill="none" stroke="#dc241f" stroke-width="7"/>
+    <rect x="0" y="16.5" width="48" height="15" fill="#0019a8"/>
+    <text x="24" y="27.6" text-anchor="middle" fill="#fff" font-size="8.4" font-weight="700" font-family="Gill Sans,Gill Sans MT,Calibri,Segoe UI,sans-serif" letter-spacing=".4">CYCLE</text>
+  </svg>
+  <div><h1>Cycle Guide</h1><small>Routes from the TfL journey planner</small></div>
+</header>
+
+<main>
+<div class="mapwrap">
+  <div id="map"></div>
+  <button id="layersbtn" class="fab" type="button" aria-label="Map type"><svg viewBox="0 0 24 24"><path d="M12 2 1 8l11 6 11-6zM3.7 12.2 1 13.7l11 6 11-6-2.7-1.5L12 17z"/></svg></button>
+  <div id="sheet" class="sheet hidden">
+    <button data-base="map" type="button">Map</button>
+    <button data-base="hybrid" type="button">Hybrid</button>
+    <button data-base="sat" type="button">Satellite</button>
+  </div>
+  <button id="locbtn" class="fab" type="button" aria-label="Go to my location"><svg viewBox="0 0 24 24"><path d="M12 2 4.5 21l7.5-4 7.5 4z"/></svg></button>
+</div>
+<p class="note">Tap the map to set a start, finish or stop on the way.</p>
+
+<section class="panel" id="planner">
+  <label for="from">From</label>
+  <div class="row"><input id="from" type="text" autocomplete="off" placeholder="Place, station or postcode"><button id="here" class="btn" type="button">My location</button></div>
+  <div id="vias"></div>
+  <button id="addvia" class="btn" type="button" style="margin-top:10px">Add a stop on the way</button>
+  <label for="to">To</label>
+  <input id="to" type="text" autocomplete="off" placeholder="Place, station or postcode">
+
+  <label for="prof">Rider confidence</label>
+  <select id="prof">
+    <option value="easy">Easy: quieter, gentler routes</option>
+    <option value="moderate" selected>Moderate</option>
+    <option value="fast">Fast: direct routes are fine</option>
+  </select>
+
+  <button id="go" class="btn primary big" type="button">Find cycle route</button>
+  <p id="err" class="err" role="alert"></p>
+  <p class="note">With stops on the way, each section is planned separately and joined up.</p>
+</section>
+
+<section id="route" class="hidden">
+  <div class="panel">
+    <div id="alts" class="alts"></div>
+    <div id="summary" class="hero"></div>
+    <div class="ctrl">
+      <button id="prev" class="btn" type="button">Back</button>
+      <button id="next" class="btn primary" type="button">Start</button>
+      <button id="repeat" class="btn" type="button">Repeat</button>
+      <button id="mute" class="btn" type="button">Sound on</button>
+    </div>
+    <label class="row" style="margin:0;text-transform:none;font-size:.9rem;letter-spacing:0;color:var(--ink);font-weight:400"><input type="checkbox" id="follow"> Follow my location, speak turns and re-route if I go off course</label>
+  </div>
+  <div class="panel"><ol id="steps" class="steps"></ol></div>
+</section>
+<p class="note">Map data &copy; OpenStreetMap contributors, CARTO and Esri. Routes: Transport for London. Search: Nominatim and postcodes.io. Unofficial, personal use only.</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const API='https://api.tfl.gov.uk';
+const $=s=>document.querySelector(s);
+const S={here:null,pts:[],routes:[],k:0,route:null,idx:-1,mute:false,watch:null,off:0,lastReroute:0,rerouting:false};
+const err=m=>{$('#err').textContent=m||''};
+
+/* ---------- map and base layers ---------- */
+const map=L.map('map',{zoomControl:false}).setView([51.5,-0.12],11);
+L.control.zoom({position:'topleft'}).addTo(map);
+const dark=window.matchMedia('(prefers-color-scheme: dark)');
+const esri=()=>L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxNativeZoom:19,maxZoom:20,attribution:'Imagery &copy; Esri'});
+const BASES={
+  map:()=>[L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/${dark.matches?'dark_all':'voyager'}/{z}/{x}/{y}{r}.png`,{subdomains:'abcd',maxZoom:20,attribution:'&copy; OpenStreetMap contributors &copy; CARTO'})],
+  hybrid:()=>[esri(),L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20,attribution:'&copy; OpenStreetMap contributors &copy; CARTO'})],
+  sat:()=>[esri()]
+};
+let baseName='map',baseLayers=[];
+function setBase(name){
+  baseLayers.forEach(l=>l.remove());
+  baseName=name;
+  baseLayers=BASES[name]();
+  baseLayers.forEach(l=>l.addTo(map).bringToBack());
+  document.querySelectorAll('#sheet button').forEach(b=>b.classList.toggle('on',b.dataset.base===name));
+  try{localStorage.setItem('base',name)}catch(e){}
+}
+dark.addEventListener&&dark.addEventListener('change',()=>{if(baseName==='map')setBase('map')});
+let saved='map';try{saved=localStorage.getItem('base')||'map'}catch(e){}
+setBase(BASES[saved]?saved:'map');
+$('#layersbtn').onclick=()=>$('#sheet').classList.toggle('hidden');
+document.querySelectorAll('#sheet button').forEach(b=>b.onclick=()=>{setBase(b.dataset.base);$('#sheet').classList.add('hidden')});
+
+const layer=L.featureGroup().addTo(map);
+const stepMark=L.circleMarker([0,0],{radius:9,color:'#fff',weight:3,fillColor:'#dc241f',fillOpacity:1});
+const you=L.marker([0,0],{icon:L.divIcon({className:'',html:'<div class="you"></div>',iconSize:[20,20]}),interactive:false,zIndexOffset:1000});
+const acc=L.circle([0,0],{radius:0,color:'#1a73ff',weight:1,fillColor:'#1a73ff',fillOpacity:.12,interactive:false});
+function showYou(){
+  you.setLatLng([S.here.lat,S.here.lon]).addTo(map);
+  acc.setLatLng([S.here.lat,S.here.lon]).setRadius(S.here.acc||0).addTo(map);
+}
+$('#locbtn').onclick=async()=>{
+  try{await locate();showYou();map.flyTo([S.here.lat,S.here.lon],16)}
+  catch(e){err(e.message);window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})}
+};
+
+map.on('click',e=>{
+  $('#sheet').classList.add('hidden');
+  const ll=`${e.latlng.lat.toFixed(5)},${e.latlng.lng.toFixed(5)}`,txt=`Pin: ${ll}`;
+  const box=document.createElement('div');box.className='pop';
+  const mk=(label,fn)=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>{fn();map.closePopup();if(S.route)plan()};box.appendChild(b)};
+  mk('Start here',()=>setField($('#from'),txt,ll));
+  mk('Add stop on the way',()=>addVia(txt,ll));
+  mk('Finish here',()=>setField($('#to'),txt,ll));
+  L.popup().setLatLng(e.latlng).setContent(box).openOn(map);
+});
+function setField(el,txt,ll){el.value=txt;el.dataset.ll=ll}
+$('#from').oninput=e=>delete e.target.dataset.ll;
+$('#to').oninput=e=>delete e.target.dataset.ll;
+
+function addVia(value='',ll=''){
+  const row=document.createElement('div');
+  row.className='row';row.style.marginTop='8px';
+  row.innerHTML='<input class="via" type="text" autocomplete="off" placeholder="Stop on the way (in order)"><button type="button" class="btn red">Remove</button>';
+  const inp=row.querySelector('input');
+  inp.value=value;if(ll)inp.dataset.ll=ll;
+  inp.oninput=()=>{delete inp.dataset.ll;delete inp.dataset.passed};
+  row.querySelector('button').onclick=()=>{row.remove();if(S.route)plan()};
+  $('#vias').appendChild(row);
+  if(!value)inp.focus();
+}
+$('#addvia').onclick=()=>addVia();
+
+/* ---------- places ---------- */
+function locate(){
+  return new Promise((ok,no)=>navigator.geolocation
+    ?navigator.geolocation.getCurrentPosition(p=>{S.here={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy};ok()},()=>no(Error('Location is blocked. Allow it in your browser settings.')),{enableHighAccuracy:true,timeout:15000})
+    :no(Error('This browser has no location support.')));
+}
+$('#here').onclick=()=>{$('#from').value='My location';delete $('#from').dataset.ll};
+let lastGeo=0;
+async function geocode(q){
+  const pc=q.replace(/\s/g,'');
+  if(/^[A-Za-z]{1,2}\d[A-Za-z\d]?\d[A-Za-z]{2}$/.test(pc)){
+    try{
+      const j=await (await fetch('https://api.postcodes.io/postcodes/'+pc)).json();
+      if(j.result)return {lat:j.result.latitude,lon:j.result.longitude,name:q.toUpperCase()};
+    }catch(e){}
+  }
+  try{
+    const wait=lastGeo+1100-Date.now();
+    if(wait>0)await new Promise(r=>setTimeout(r,wait));
+    lastGeo=Date.now();
+    const j=await (await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=gb&viewbox=-0.6,51.75,0.4,51.2&q='+encodeURIComponent(q))).json();
+    if(j.length)return {lat:+j[0].lat,lon:+j[0].lon,name:j[0].display_name.split(',').slice(0,2).join(',').trim()};
+  }catch(e){}
+  try{
+    const j=await (await fetch(`${API}/StopPoint/Search?query=${encodeURIComponent(q)}&maxResults=3`)).json();
+    const m=(j.matches||[]).find(x=>x.lat!=null);
+    if(m)return {lat:m.lat,lon:m.lon,name:m.name};
+  }catch(e){}
+  throw Error(`Could not find "${q}". Add the area, or tap the map instead.`);
+}
+async function place(el){
+  if(el.dataset.ll){const [lat,lon]=el.dataset.ll.split(',').map(Number);return {lat,lon}}
+  if(el.value.trim()==='My location'){await locate();return {...S.here}}
+  const g=await geocode(el.value.trim());
+  el.value=g.name;el.dataset.ll=`${g.lat},${g.lon}`;
+  return g;
+}
+
+/* ---------- TfL cycle routing ---------- */
+const fmtD=km=>km<1?`${Math.round(km*1000)} metres`:`${km.toFixed(1)} km`;
+const fmtT=s=>{const m=Math.round(s/60);return m>=60?`${Math.floor(m/60)} h ${m%60} min`:`${m} min`};
+
+async function tflCycle(a,b,depth){
+  const q=new URLSearchParams({mode:'cycle',cyclePreference:'AllTheWay',bikeProficiency:$('#prof').value,alternativeCycle:'true'});
+  let j;
+  try{
+    const r=await fetch(`${API}/Journey/JourneyResults/${encodeURIComponent(a)}/to/${encodeURIComponent(b)}?${q}`);
+    j=await r.json();
+  }catch(e){
+    throw Error("Couldn't reach TfL's journey planner. Check your connection and try again.");
+  }
+  if(!j.journeys||!j.journeys.length){
+    const f=j.fromLocationDisambiguation?.disambiguationOptions?.[0]?.parameterValue;
+    const t=j.toLocationDisambiguation?.disambiguationOptions?.[0]?.parameterValue;
+    if((f||t)&&!depth)return tflCycle(f||a,t||b,1);
+    throw Error(j.message||'TfL found no cycling route between those points.');
+  }
+  return j.journeys;
+}
+function buildRoute(j,label){
+  let shape=[];const steps=[];
+  j.legs.forEach(l=>{
+    let pts;
+    try{pts=JSON.parse(l.path.lineString)}catch(e){pts=[[l.departurePoint.lat,l.departurePoint.lon],[l.arrivalPoint.lat,l.arrivalPoint.lon]]}
+    shape=shape.concat(pts);
+    const a=l.departurePoint;
+    steps.push({text:l.instruction.summary,say:l.instruction.summary,lat:a.lat,lon:a.lon,m:0});
+    (l.instruction.steps||[]).forEach(s=>{
+      const t=`${s.descriptionHeading||''} ${s.description||''}`.replace(/\s+/g,' ').trim();
+      if(!t)return;
+      const tag=s.trackType&&!/^(none|unknown)$/i.test(s.trackType)?s.trackType:'';
+      steps.push({text:t,say:t+(s.distance>0?`. Continue for ${fmtD(s.distance/1000)}.`:''),lat:s.latitude??a.lat,lon:s.longitude??a.lon,m:s.distance||0,tag});
+    });
+  });
+  const end=j.legs[j.legs.length-1].arrivalPoint;
+  steps.push({text:'You have arrived',say:'You have arrived',lat:end.lat,lon:end.lon,m:0});
+  const m=j.legs.reduce((n,l)=>n+(l.distance||0),0)||steps.reduce((n,s)=>n+s.m,0);
+  return {shape,steps,km:m/1000,secs:j.duration*60,label};
+}
+
+async function plan(opt={}){
+  const btn=$('#go');
+  if(!opt.reroute){err('');document.querySelectorAll('.via').forEach(e=>delete e.dataset.passed)}
+  try{
+    btn.disabled=true;btn.textContent='Planning...';
+    if(!$('#from').value.trim()||!$('#to').value.trim())throw Error('Add a start and a finish, or tap the map to drop them.');
+    const els=[$('#from'),...[...document.querySelectorAll('.via')].filter(e=>e.value.trim()&&!(opt.reroute&&e.dataset.passed==='1')),$('#to')];
+    const pts=[];
+    for(let i=0;i<els.length;i++){
+      if(i===0&&opt.reroute&&S.here){pts.push({...S.here});continue}
+      pts.push(await place(els[i]));
+    }
+    const ll=p=>`${p.lat},${p.lon}`;
+    let routes;
+    if(pts.length===2){
+      routes=(await tflCycle(ll(pts[0]),ll(pts[1]))).map((j,i)=>buildRoute(j,`Route ${i+1}`));
+    }else{
+      // Stops on the way: plan each section in turn and join them into one ride.
+      let shape=[],steps=[],km=0,secs=0;
+      for(let i=0;i<pts.length-1;i++){
+        const r=buildRoute((await tflCycle(ll(pts[i]),ll(pts[i+1])))[0]);
+        if(i<pts.length-2){const last=r.steps[r.steps.length-1];last.text=last.say=`Stop ${i+1} reached`}
+        shape=shape.concat(r.shape);steps=steps.concat(r.steps);km+=r.km;secs+=r.secs;
+      }
+      routes=[{shape,steps,km,secs,label:'Route 1'}];
+    }
+    S.pts=pts;S.routes=routes;
+    showRoute(0,opt.reroute);
+  }catch(e){err(e.message)}
+  btn.disabled=false;btn.textContent='Find cycle route';
+}
+$('#go').onclick=()=>plan();
+
+/* ---------- display ---------- */
+function showRoute(k,keepView){
+  S.k=k;S.route=S.routes[k];S.idx=-1;
+  layer.clearLayers();
+  S.routes.forEach((r,i)=>{if(i!==k){
+    L.polyline(r.shape,{color:'#fff',weight:9,opacity:.9}).addTo(layer);
+    L.polyline(r.shape,{color:'#8d97b5',weight:5}).addTo(layer);
+  }});
+  L.polyline(S.route.shape,{color:'#fff',weight:11,opacity:.95,lineCap:'round',lineJoin:'round'}).addTo(layer);
+  const main=L.polyline(S.route.shape,{color:'#0019a8',weight:6,lineCap:'round',lineJoin:'round'}).addTo(layer);
+  S.pts.forEach((p,i)=>{
+    const last=i===S.pts.length-1;
+    if(i===0||last)L.circleMarker([p.lat,p.lon],{radius:9,color:'#fff',weight:3,fillColor:last?'#dc241f':'#00a651',fillOpacity:1}).addTo(layer);
+    else L.marker([p.lat,p.lon],{icon:L.divIcon({className:'',html:`<div class="pin">${i}</div>`,iconSize:[26,26]})}).addTo(layer);
+  });
+  if(!keepView)map.fitBounds(main.getBounds(),{padding:[28,28]});
+  stepMark.remove();
+
+  const alts=$('#alts');alts.innerHTML='';
+  if(S.routes.length>1)S.routes.forEach((r,i)=>{
+    const b=document.createElement('button');
+    b.className='btn'+(i===k?' on':'');
+    b.textContent=`${r.label}: ${fmtT(r.secs)}`;
+    b.onclick=()=>showRoute(i,false);
+    alts.appendChild(b);
+  });
+  const arrive=new Date(Date.now()+S.route.secs*1000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  $('#summary').innerHTML=`<div class="t">${fmtT(S.route.secs)}</div><div class="d">${fmtD(S.route.km)}<br>Arrive about ${arrive}</div>`;
+  $('#next').textContent='Start';
+  const ol=$('#steps');ol.innerHTML='';
+  S.route.steps.forEach((s,i)=>{
+    const li=document.createElement('li');
+    li.className='step';
+    li.textContent=s.text;
+    if(s.tag){const t=document.createElement('span');t.className='tag';t.textContent=s.tag;li.appendChild(t)}
+    if(s.m>0){const sm=document.createElement('small');sm.textContent=fmtD(s.m/1000);li.appendChild(sm)}
+    li.onclick=()=>setStep(i);
+    ol.appendChild(li);
+  });
+  $('#route').classList.remove('hidden');
+  if(keepView)setStep(0);
+  else $('#route').scrollIntoView({behavior:'smooth'});
+}
+
+/* ---------- audio and steps ---------- */
+function say(t){
+  if(S.mute||!('speechSynthesis' in window))return;
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(t);
+  u.lang='en-GB';
+  const v=speechSynthesis.getVoices().find(v=>v.lang==='en-GB');
+  if(v)u.voice=v;
+  speechSynthesis.speak(u);
+}
+function setStep(i){
+  const st=S.route.steps;
+  if(i<0||i>=st.length)return;
+  S.idx=i;
+  const items=[...document.querySelectorAll('.step')];
+  items.forEach((el,k)=>el.classList.toggle('on',k===i));
+  items[i].scrollIntoView({block:'nearest',behavior:'smooth'});
+  stepMark.setLatLng([st[i].lat,st[i].lon]).addTo(map);
+  if(S.watch==null)map.panTo([st[i].lat,st[i].lon]);
+  $('#next').textContent=i===st.length-1?'Done':'Next';
+  say(st[i].say);
+}
+$('#next').onclick=()=>{
+  if(S.idx===-1&&navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{});
+  setStep(Math.min(S.idx+1,S.route.steps.length-1));
+};
+$('#prev').onclick=()=>setStep(Math.max(S.idx-1,0));
+$('#repeat').onclick=()=>{if(S.idx>=0)say(S.route.steps[S.idx].say)};
+$('#mute').onclick=()=>{
+  S.mute=!S.mute;
+  $('#mute').textContent=S.mute?'Sound off':'Sound on';
+  if(S.mute&&'speechSynthesis' in window)speechSynthesis.cancel();
+};
+
+/* ---------- follow, auto-advance, re-route ---------- */
+const hav=(a,b,c,d)=>{const R=6371000,r=x=>x*Math.PI/180,dl=r(c-a),dn=r(d-b);const h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
+function distToRoute(lat,lon){
+  const k=Math.cos(lat*Math.PI/180),X=l=>l*111320*k,Y=l=>l*110540;
+  const px=X(lon),py=Y(lat),sh=S.route.shape;
+  let best=Infinity;
+  for(let i=0;i<sh.length-1;i++){
+    const ax=X(sh[i][1]),ay=Y(sh[i][0]),bx=X(sh[i+1][1]),by=Y(sh[i+1][0]);
+    const dx=bx-ax,dy=by-ay,len=dx*dx+dy*dy;
+    let t=len?((px-ax)*dx+(py-ay)*dy)/len:0;
+    t=Math.max(0,Math.min(1,t));
+    best=Math.min(best,Math.hypot(px-(ax+t*dx),py-(ay+t*dy)));
+  }
+  return best;
+}
+function stopFollow(){if(S.watch!=null){navigator.geolocation.clearWatch(S.watch);S.watch=null}}
+$('#follow').onchange=e=>{
+  stopFollow();
+  if(!e.target.checked)return;
+  if(!navigator.geolocation){e.target.checked=false;return}
+  S.watch=navigator.geolocation.watchPosition(p=>{
+    S.here={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy};
+    showYou();
+    map.panTo([S.here.lat,S.here.lon]);
+    if(!S.route)return;
+    document.querySelectorAll('.via').forEach(el=>{
+      if(el.dataset.ll&&el.dataset.passed!=='1'){
+        const [a,b]=el.dataset.ll.split(',').map(Number);
+        if(hav(S.here.lat,S.here.lon,a,b)<60)el.dataset.passed='1';
+      }
+    });
+    const nx=S.route.steps[S.idx+1];
+    if(S.idx>=0&&nx&&hav(S.here.lat,S.here.lon,nx.lat,nx.lon)<50)setStep(S.idx+1);
+    S.off=distToRoute(S.here.lat,S.here.lon)>70?S.off+1:0;
+    if(S.off>=4&&!S.rerouting&&S.idx>=0&&Date.now()-S.lastReroute>30000){
+      S.rerouting=true;S.lastReroute=Date.now();
+      say('Off route. Finding a new way.');
+      plan({reroute:true}).finally(()=>{S.rerouting=false;S.off=0});
+    }
+  },()=>{e.target.checked=false;stopFollow()},{enableHighAccuracy:true});
+};
+if('speechSynthesis' in window)speechSynthesis.getVoices();
+</script>
+</body>
+</html>
