@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TfL Cycle Guide</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#eef1f6;--panel:#fff;--ink:#14202e;--mute:#5a6879;--line:#d3dbe6;--accent:#0019a8;--onaccent:#fff;--warn:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1520;--panel:#182130;--ink:#e8eef6;--mute:#95a3b6;--line:#2a374a;--accent:#7f9cff;--onaccent:#0a1030;--warn:#ff8a80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 "Gill Sans","Gill Sans MT","Segoe UI",system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:1.5rem;margin:4px 0 12px}
+#map{height:260px;border-radius:12px;border:1px solid var(--line);margin-bottom:6px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+label{display:block;font-size:.85rem;color:var(--mute);margin:10px 0 4px}
+input[type=text],select{width:100%;padding:11px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+.row{display:flex;gap:8px;align-items:center}
+.row>input[type=text]{flex:1}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:10px 12px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--onaccent);border-color:var(--accent);font-weight:600}
+button.on{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+button:disabled{opacity:.5}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.err{color:var(--warn);margin:8px 0 0;min-height:1.2em}
+.note{color:var(--mute);font-size:.85rem;margin:4px 0}
+.ctrl{display:grid;grid-template-columns:1fr 2fr 1fr 1fr;gap:8px;margin:10px 0}
+.alts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.steps{list-style:none;margin:0;padding:0}
+.step{position:relative;padding:8px 8px 8px 34px;cursor:pointer;border-radius:8px}
+.step::before{content:"";position:absolute;left:12px;top:0;bottom:0;width:5px;background:var(--accent)}
+.step::after{content:"";position:absolute;left:8px;top:15px;width:13px;height:13px;border-radius:50%;background:var(--panel);border:3px solid var(--accent)}
+.step.on{background:color-mix(in srgb,var(--accent) 18%,transparent);font-weight:600}
+.step small{display:block;color:var(--mute);font-weight:400}
+.hidden{display:none}
+.pin{background:#1d4ed8;color:#fff;border:2px solid #fff;border-radius:50%;width:24px;height:24px;text-align:center;font:700 13px/20px sans-serif}
+.pop{display:grid;gap:6px}
+@media(prefers-reduced-motion:no-preference){.step{transition:background .2s}}
+</style>
+</head>
+<body>
+<main>
+<h1>TfL Cycle Guide</h1>
+<div id="map"></div>
+<p class="note">Tap the map to set a start, finish or stop on the way.</p>
+
+<section class="panel" id="planner">
+  <label for="from">From</label>
+  <div class="row"><input id="from" type="text" autocomplete="off" placeholder="Place, station or postcode"><button id="here" type="button">My location</button></div>
+  <div id="vias"></div>
+  <button id="addvia" type="button" style="margin-top:10px">Add a stop on the way</button>
+  <label for="to">To</label>
+  <input id="to" type="text" autocomplete="off" placeholder="Place, station or postcode">
+
+  <label for="prof">Rider confidence</label>
+  <select id="prof">
+    <option value="easy">Easy: quieter, gentler routes</option>
+    <option value="moderate" selected>Moderate</option>
+    <option value="fast">Fast: direct routes are fine</option>
+  </select>
+
+  <button id="go" class="primary" style="width:100%;margin-top:14px">Find cycle route</button>
+  <p id="err" class="err" role="alert"></p>
+  <p class="note">Routes come from TfL's journey planner, the same one TfL Go uses. With stops on the way, each section is planned separately and joined up.</p>
+</section>
+
+<section id="route" class="hidden">
+  <div class="panel">
+    <div id="alts" class="alts"></div>
+    <div id="summary"></div>
+    <div class="ctrl">
+      <button id="prev" type="button">Back</button>
+      <button id="next" type="button" class="primary">Start</button>
+      <button id="repeat" type="button">Repeat</button>
+      <button id="mute" type="button">Sound on</button>
+    </div>
+    <label class="row" style="color:var(--ink);margin:0"><input type="checkbox" id="follow"> Follow my location, speak turns and re-route if I go off course</label>
+  </div>
+  <div class="panel"><ol id="steps" class="steps"></ol></div>
+</section>
+<p class="note">Map data &copy; OpenStreetMap contributors. Routes: Transport for London. Search: Nominatim and postcodes.io.</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const API='https://api.tfl.gov.uk';
+const $=s=>document.querySelector(s);
+const S={here:null,pts:[],routes:[],k:0,route:null,idx:-1,mute:false,watch:null,off:0,lastReroute:0,rerouting:false};
+const err=m=>{$('#err').textContent=m||''};
+
+/* ---------- map ---------- */
+const map=L.map('map').setView([51.5,-0.12],11);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+const layer=L.featureGroup().addTo(map);
+const stepMark=L.circleMarker([0,0],{radius:9,color:'#fff',weight:3,fillColor:'#e1251b',fillOpacity:1});
+const youMark=L.circleMarker([0,0],{radius:7,color:'#fff',weight:3,fillColor:'#1d4ed8',fillOpacity:1});
+
+map.on('click',e=>{
+  const ll=`${e.latlng.lat.toFixed(5)},${e.latlng.lng.toFixed(5)}`,txt=`Pin: ${ll}`;
+  const box=document.createElement('div');box.className='pop';
+  const mk=(label,fn)=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>{fn();map.closePopup();if(S.route)plan()};box.appendChild(b)};
+  mk('Start here',()=>setField($('#from'),txt,ll));
+  mk('Add stop on the way',()=>addVia(txt,ll));
+  mk('Finish here',()=>setField($('#to'),txt,ll));
+  L.popup().setLatLng(e.latlng).setContent(box).openOn(map);
+});
+function setField(el,txt,ll){el.value=txt;el.dataset.ll=ll}
+$('#from').oninput=e=>delete e.target.dataset.ll;
+$('#to').oninput=e=>delete e.target.dataset.ll;
+
+function addVia(value='',ll=''){
+  const row=document.createElement('div');
+  row.className='row';row.style.marginTop='8px';
+  row.innerHTML='<input class="via" type="text" autocomplete="off" placeholder="Stop on the way (in order)"><button type="button">Remove</button>';
+  const inp=row.querySelector('input');
+  inp.value=value;if(ll)inp.dataset.ll=ll;
+  inp.oninput=()=>{delete inp.dataset.ll;delete inp.dataset.passed};
+  row.querySelector('button').onclick=()=>{row.remove();if(S.route)plan()};
+  $('#vias').appendChild(row);
+  if(!value)inp.focus();
+}
+$('#addvia').onclick=()=>addVia();
+
+/* ---------- places ---------- */
+function locate(){
+  return new Promise((ok,no)=>navigator.geolocation
+    ?navigator.geolocation.getCurrentPosition(p=>{S.here={lat:p.coords.latitude,lon:p.coords.longitude};ok()},()=>no(Error('Location is blocked. Allow it in your browser settings.')),{enableHighAccuracy:true,timeout:15000})
+    :no(Error('This browser has no location support.')));
+}
+$('#here').onclick=()=>{$('#from').value='My location';delete $('#from').dataset.ll};
+let lastGeo=0;
+async function geocode(q){
+  const pc=q.replace(/\s/g,'');
+  if(/^[A-Za-z]{1,2}\d[A-Za-z\d]?\d[A-Za-z]{2}$/.test(pc)){
+    try{
+      const j=await (await fetch('https://api.postcodes.io/postcodes/'+pc)).json();
+      if(j.result)return {lat:j.result.latitude,lon:j.result.longitude,name:q.toUpperCase()};
+    }catch(e){}
+  }
+  try{
+    const wait=lastGeo+1100-Date.now();
+    if(wait>0)await new Promise(r=>setTimeout(r,wait));
+    lastGeo=Date.now();
+    const j=await (await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=gb&viewbox=-0.6,51.75,0.4,51.2&q='+encodeURIComponent(q))).json();
+    if(j.length)return {lat:+j[0].lat,lon:+j[0].lon,name:j[0].display_name.split(',').slice(0,2).join(',').trim()};
+  }catch(e){}
+  try{
+    const j=await (await fetch(`${API}/StopPoint/Search?query=${encodeURIComponent(q)}&maxResults=3`)).json();
+    const m=(j.matches||[]).find(x=>x.lat!=null);
+    if(m)return {lat:m.lat,lon:m.lon,name:m.name};
+  }catch(e){}
+  throw Error(`Could not find "${q}". Add the area, or tap the map instead.`);
+}
+async function place(el){
+  if(el.dataset.ll){const [lat,lon]=el.dataset.ll.split(',').map(Number);return {lat,lon}}
+  if(el.value.trim()==='My location'){await locate();return {...S.here}}
+  const g=await geocode(el.value.trim());
+  el.value=g.name;el.dataset.ll=`${g.lat},${g.lon}`;
+  return g;
+}
+
+/* ---------- TfL cycle routing ---------- */
+const fmtD=km=>km<1?`${Math.round(km*1000)} metres`:`${km.toFixed(1)} km`;
+const fmtT=s=>{const m=Math.round(s/60);return m>=60?`${Math.floor(m/60)} h ${m%60} min`:`${m} min`};
+
+async function tflCycle(a,b,depth){
+  const q=new URLSearchParams({mode:'cycle',cyclePreference:'AllTheWay',bikeProficiency:$('#prof').value,alternativeCycle:'true'});
+  let j;
+  try{
+    const r=await fetch(`${API}/Journey/JourneyResults/${encodeURIComponent(a)}/to/${encodeURIComponent(b)}?${q}`);
+    j=await r.json();
+  }catch(e){
+    throw Error("Couldn't reach TfL's journey planner. Check your connection and try again.");
+  }
+  if(!j.journeys||!j.journeys.length){
+    const f=j.fromLocationDisambiguation?.disambiguationOptions?.[0]?.parameterValue;
+    const t=j.toLocationDisambiguation?.disambiguationOptions?.[0]?.parameterValue;
+    if((f||t)&&!depth)return tflCycle(f||a,t||b,1);
+    throw Error(j.message||'TfL found no cycling route between those points.');
+  }
+  return j.journeys;
+}
+function buildRoute(j,label){
+  let shape=[];const steps=[];
+  j.legs.forEach(l=>{
+    let pts;
+    try{pts=JSON.parse(l.path.lineString)}catch(e){pts=[[l.departurePoint.lat,l.departurePoint.lon],[l.arrivalPoint.lat,l.arrivalPoint.lon]]}
+    shape=shape.concat(pts);
+    const a=l.departurePoint;
+    steps.push({text:l.instruction.summary,say:l.instruction.summary,lat:a.lat,lon:a.lon,m:0});
+    (l.instruction.steps||[]).forEach(s=>{
+      const t=`${s.descriptionHeading||''} ${s.description||''}`.replace(/\s+/g,' ').trim();
+      if(!t)return;
+      const tag=s.trackType&&!/^(none|unknown)$/i.test(s.trackType)?s.trackType:'';
+      steps.push({text:t,say:t+(s.distance>0?`. Continue for ${fmtD(s.distance/1000)}.`:''),lat:s.latitude??a.lat,lon:s.longitude??a.lon,m:s.distance||0,tag});
+    });
+  });
+  const end=j.legs[j.legs.length-1].arrivalPoint;
+  steps.push({text:'You have arrived',say:'You have arrived',lat:end.lat,lon:end.lon,m:0});
+  const m=j.legs.reduce((n,l)=>n+(l.distance||0),0)||steps.reduce((n,s)=>n+s.m,0);
+  return {shape,steps,km:m/1000,secs:j.duration*60,label};
+}
+
+async function plan(opt={}){
+  const btn=$('#go');
+  if(!opt.reroute){err('');document.querySelectorAll('.via').forEach(e=>delete e.dataset.passed)}
+  try{
+    btn.disabled=true;btn.textContent='Planning...';
+    if(!$('#from').value.trim()||!$('#to').value.trim())throw Error('Add a start and a finish, or tap the map to drop them.');
+    const els=[$('#from'),...[...document.querySelectorAll('.via')].filter(e=>e.value.trim()&&!(opt.reroute&&e.dataset.passed==='1')),$('#to')];
+    const pts=[];
+    for(let i=0;i<els.length;i++){
+      if(i===0&&opt.reroute&&S.here){pts.push({...S.here});continue}
+      pts.push(await place(els[i]));
+    }
+    const ll=p=>`${p.lat},${p.lon}`;
+    let routes;
+    if(pts.length===2){
+      routes=(await tflCycle(ll(pts[0]),ll(pts[1]))).map((j,i)=>buildRoute(j,`Route ${i+1}`));
+    }else{
+      // Stops on the way: plan each section in turn and join them into one ride.
+      let shape=[],steps=[],km=0,secs=0;
+      for(let i=0;i<pts.length-1;i++){
+        const r=buildRoute((await tflCycle(ll(pts[i]),ll(pts[i+1])))[0]);
+        if(i<pts.length-2){const last=r.steps[r.steps.length-1];last.text=last.say=`Stop ${i+1} reached`}
+        shape=shape.concat(r.shape);steps=steps.concat(r.steps);km+=r.km;secs+=r.secs;
+      }
+      routes=[{shape,steps,km,secs,label:'Route 1'}];
+    }
+    S.pts=pts;S.routes=routes;
+    showRoute(0,opt.reroute);
+  }catch(e){err(e.message)}
+  btn.disabled=false;btn.textContent='Find cycle route';
+}
+$('#go').onclick=()=>plan();
+
+/* ---------- display ---------- */
+function showRoute(k,keepView){
+  S.k=k;S.route=S.routes[k];S.idx=-1;
+  layer.clearLayers();
+  S.routes.forEach((r,i)=>{if(i!==k)L.polyline(r.shape,{color:'#8a94a3',weight:5,opacity:.7}).addTo(layer)});
+  const main=L.polyline(S.route.shape,{color:'#d6246e',weight:6}).addTo(layer);
+  S.pts.forEach((p,i)=>{
+    const last=i===S.pts.length-1;
+    if(i===0||last)L.circleMarker([p.lat,p.lon],{radius:8,color:'#fff',weight:3,fillColor:last?'#c62828':'#1a9c4b',fillOpacity:1}).addTo(layer);
+    else L.marker([p.lat,p.lon],{icon:L.divIcon({className:'',html:`<div class="pin">${i}</div>`,iconSize:[24,24]})}).addTo(layer);
+  });
+  if(!keepView)map.fitBounds(main.getBounds(),{padding:[24,24]});
+  stepMark.remove();
+
+  const alts=$('#alts');alts.innerHTML='';
+  if(S.routes.length>1)S.routes.forEach((r,i)=>{
+    const b=document.createElement('button');
+    b.textContent=`${r.label}: ${fmtD(r.km)}, ${fmtT(r.secs)}`;
+    if(i===k)b.classList.add('on');
+    b.onclick=()=>showRoute(i,false);
+    alts.appendChild(b);
+  });
+  $('#summary').innerHTML=`<b>${fmtD(S.route.km)}</b> &nbsp; about ${fmtT(S.route.secs)}`;
+  $('#next').textContent='Start';
+  const ol=$('#steps');ol.innerHTML='';
+  S.route.steps.forEach((s,i)=>{
+    const li=document.createElement('li');
+    li.className='step';
+    const sub=[s.m>0?fmtD(s.m/1000):'',s.tag||''].filter(Boolean).join(', ');
+    li.textContent=s.text;
+    if(sub){const sm=document.createElement('small');sm.textContent=sub;li.appendChild(sm)}
+    li.onclick=()=>setStep(i);
+    ol.appendChild(li);
+  });
+  $('#route').classList.remove('hidden');
+  if(keepView)setStep(0);
+  else $('#route').scrollIntoView({behavior:'smooth'});
+}
+
+/* ---------- audio and steps ---------- */
+function say(t){
+  if(S.mute||!('speechSynthesis' in window))return;
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(t);
+  u.lang='en-GB';
+  const v=speechSynthesis.getVoices().find(v=>v.lang==='en-GB');
+  if(v)u.voice=v;
+  speechSynthesis.speak(u);
+}
+function setStep(i){
+  const st=S.route.steps;
+  if(i<0||i>=st.length)return;
+  S.idx=i;
+  const items=[...document.querySelectorAll('.step')];
+  items.forEach((el,k)=>el.classList.toggle('on',k===i));
+  items[i].scrollIntoView({block:'nearest',behavior:'smooth'});
+  stepMark.setLatLng([st[i].lat,st[i].lon]).addTo(map);
+  if(S.watch==null)map.panTo([st[i].lat,st[i].lon]);
+  $('#next').textContent=i===st.length-1?'Done':'Next';
+  say(st[i].say);
+}
+$('#next').onclick=()=>{
+  if(S.idx===-1&&navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{});
+  setStep(Math.min(S.idx+1,S.route.steps.length-1));
+};
+$('#prev').onclick=()=>setStep(Math.max(S.idx-1,0));
+$('#repeat').onclick=()=>{if(S.idx>=0)say(S.route.steps[S.idx].say)};
+$('#mute').onclick=()=>{
+  S.mute=!S.mute;
+  $('#mute').textContent=S.mute?'Sound off':'Sound on';
+  if(S.mute&&'speechSynthesis' in window)speechSynthesis.cancel();
+};
+
+/* ---------- follow, auto-advance, re-route ---------- */
+const hav=(a,b,c,d)=>{const R=6371000,r=x=>x*Math.PI/180,dl=r(c-a),dn=r(d-b);const h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
+function distToRoute(lat,lon){
+  const k=Math.cos(lat*Math.PI/180),X=l=>l*111320*k,Y=l=>l*110540;
+  const px=X(lon),py=Y(lat),sh=S.route.shape;
+  let best=Infinity;
+  for(let i=0;i<sh.length-1;i++){
+    const ax=X(sh[i][1]),ay=Y(sh[i][0]),bx=X(sh[i+1][1]),by=Y(sh[i+1][0]);
+    const dx=bx-ax,dy=by-ay,len=dx*dx+dy*dy;
+    let t=len?((px-ax)*dx+(py-ay)*dy)/len:0;
+    t=Math.max(0,Math.min(1,t));
+    best=Math.min(best,Math.hypot(px-(ax+t*dx),py-(ay+t*dy)));
+  }
+  return best;
+}
+function stopFollow(){if(S.watch!=null){navigator.geolocation.clearWatch(S.watch);S.watch=null}youMark.remove()}
+$('#follow').onchange=e=>{
+  stopFollow();
+  if(!e.target.checked)return;
+  if(!navigator.geolocation){e.target.checked=false;return}
+  S.watch=navigator.geolocation.watchPosition(p=>{
+    S.here={lat:p.coords.latitude,lon:p.coords.longitude};
+    youMark.setLatLng([S.here.lat,S.here.lon]).addTo(map);
+    map.panTo([S.here.lat,S.here.lon]);
+    if(!S.route)return;
+    document.querySelectorAll('.via').forEach(el=>{
+      if(el.dataset.ll&&el.dataset.passed!=='1'){
+        const [a,b]=el.dataset.ll.split(',').map(Number);
+        if(hav(S.here.lat,S.here.lon,a,b)<60)el.dataset.passed='1';
+      }
+    });
+    const nx=S.route.steps[S.idx+1];
+    if(S.idx>=0&&nx&&hav(S.here.lat,S.here.lon,nx.lat,nx.lon)<50)setStep(S.idx+1);
+    S.off=distToRoute(S.here.lat,S.here.lon)>70?S.off+1:0;
+    if(S.off>=4&&!S.rerouting&&S.idx>=0&&Date.now()-S.lastReroute>30000){
+      S.rerouting=true;S.lastReroute=Date.now();
+      say('Off route. Finding a new way.');
+      plan({reroute:true}).finally(()=>{S.rerouting=false;S.off=0});
+    }
+  },()=>{e.target.checked=false;stopFollow()},{enableHighAccuracy:true});
+};
+if('speechSynthesis' in window)speechSynthesis.getVoices();
+</script>
+</body>
+</html>
